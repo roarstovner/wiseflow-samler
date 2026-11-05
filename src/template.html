@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src blob: data:; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WISEflow-samler</title>
+<style>
+:root {
+  /* Layout: én smal arbeidskolonne – slipp, velg, lag. */
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --ink: #1c2230;
+  --muted: #5d6677;
+  --line: #d9dde5;
+  --accent: #1f5fae;
+  --accent-ink: #ffffff;
+  --ok: #217a4b;
+  --warn: #a5610b;
+  --bad: #b3261e;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171d; --panel: #1d2129; --ink: #e7eaf0; --muted: #9aa3b2;
+    --line: #333a46; --accent: #6ea4ec; --accent-ink: #0d1420;
+    --ok: #5cc28b; --warn: #e0a54a; --bad: #f08a82;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); }
+main { max-width: 820px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 20px; }
+h1 { font-size: 1.55rem; margin: 0; text-wrap: balance; }
+h2 { font-size: 1rem; margin: 0 0 10px; }
+p { margin: 0; }
+.lead { color: var(--muted); max-width: 65ch; }
+.privacy { display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 8%, var(--panel));
+  padding: 10px 12px; border-radius: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+#drop { border: 2px dashed var(--line); border-radius: 10px; padding: 34px 16px; text-align: center; background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s; }
+#drop:hover, #drop:focus-visible, #drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); outline: none; }
+details.help { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+details.help summary { cursor: pointer; font-weight: 600; padding: 12px 16px; border-radius: 10px; }
+details.help summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+details.help[open] summary { border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+.helpbody { padding: 14px 16px 16px; display: grid; gap: 12px; }
+.helpbody ol { margin: 0; padding-left: 22px; display: grid; gap: 5px; }
+.helpbody figure { margin: 0; }
+.helpbody img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+.helpbody figcaption { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+.contact { color: var(--muted); font-size: .9rem; text-align: center; }
+.contact a { color: var(--accent); }
+#drop strong { display: block; font-size: 1.1rem; margin-bottom: 4px; }
+#drop span { color: var(--muted); font-size: .9rem; }
+.opts { display: grid; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+label.disabled { color: var(--muted); cursor: not-allowed; }
+input[type=radio], input[type=checkbox] { margin-top: 4px; accent-color: var(--accent); }
+.hint { color: var(--muted); font-size: .85rem; }
+button { font: inherit; font-weight: 600; border-radius: 8px; padding: 10px 18px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.summary { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: .9rem; margin-bottom: 12px; font-variant-numeric: tabular-nums; }
+.summary b { color: var(--ink); }
+ol.cands { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 420px; overflow: auto; }
+ol.cands li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.cname { font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.cname .pos { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.5em; font-weight: 500; }
+.parts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chip { font-size: .78rem; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.cover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--accent); }
+.chip.skip { border-color: color-mix(in srgb, var(--warn) 60%, transparent); color: var(--warn); }
+.chip.none { border-color: color-mix(in srgb, var(--bad) 60%, transparent); color: var(--bad); }
+progress { width: 100%; height: 10px; accent-color: var(--accent); }
+#status { font-size: .9rem; color: var(--muted); }
+#status.err { color: var(--bad); }
+#result a { color: var(--accent); font-weight: 600; }
+#result ul { margin: 8px 0 0; padding-left: 20px; }
+.warnlist { color: var(--warn); font-size: .88rem; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:8px">
+    <h1>WISEflow-samler</h1>
+    <p class="lead">Slipp inn zip-fila fra «Offline vurdering» i WISEflow. Verktøyet setter sammen omslag, seksjoner og vedlegg til én PDF per kandidat, eller til én samlet PDF med alle kandidatene. Det virker for FLOWmulti, FLOWassign og FLOWlock.</p>
+  </header>
+
+  <div class="privacy" role="note">
+    <span aria-hidden="true">●</span>
+    <span>Alt skjer i nettleseren på denne maskinen. Fila lastes ikke opp noe sted, og verktøyet virker uten internett. Du kan koble fra nettet før du bruker det.</span>
+  </div>
+
+  <details class="help">
+    <summary>Hvor finner jeg zip-fila?</summary>
+    <div class="helpbody">
+      <ol>
+        <li>Gå til fanen <strong>Sensor</strong> i WISEflow.</li>
+        <li>Åpne riktig flow.</li>
+        <li>Klikk <strong>Offline vurdering</strong> øverst til høyre → gå gjennom de tre stegene → <strong>Eksporter</strong> → <strong>Generer pakke</strong>.</li>
+        <li>Last ned zip-fila, og slipp den i feltet under. Du trenger ikke å pakke den ut.</li>
+      </ol>
+      <figure>
+        <img src="__HELPIMAGE__" width="1221" height="832" alt="Flowsiden i WISEflow. Fanen Sensor er merket 1, flownavnet er merket 2 og knappen Offline vurdering er merket 3.">
+        <figcaption>Slik ser det ut når du har klikket på Sensor (1) og åpnet flowen (2). Herfra går du videre med Offline vurdering (3).</figcaption>
+      </figure>
+    </div>
+  </details>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Velg zip-fil">
+    <strong>Slipp zip-fila her</strong>
+    <span>eller klikk for å velge fil</span>
+    <input id="file" type="file" accept=".zip,application/zip" hidden>
+  </div>
+
+  <section class="panel" id="overview" hidden>
+    <h2 id="flowname">Innhold</h2>
+    <div class="summary" id="summary"></div>
+    <ol class="cands" id="cands"></ol>
+  </section>
+
+  <section class="panel opts" id="options" hidden>
+    <fieldset>
+      <legend>Hva vil du ha?</legend>
+      <label><input type="radio" name="mode" id="mode-all" value="all" checked> <span>Alle kandidatene i én PDF <span class="hint">(med bokmerker per kandidat og del)</span></span></label>
+      <label><input type="radio" name="mode" id="mode-each" value="each"> <span>Én PDF per kandidat <span class="hint">(lastes ned som zip)</span></span></label>
+    </fieldset>
+    <fieldset>
+      <legend>Personvern</legend>
+      <label><input type="checkbox" id="opt-showname"> <span>Vis kandidatenes navn <span class="hint">(på omslag og skilleark, i bunntekst, bokmerker og filnavn)</span></span></label>
+    </fieldset>
+    <fieldset>
+      <legend>Innhold</legend>
+      <label><input type="checkbox" id="opt-itemguide" checked> <span>Ta med sensorveiledningen som står over hver svarboks <span class="hint">(fjern haken for å skrive ut bare kandidatens svar)</span></span></label>
+      <label><input type="checkbox" id="opt-cover" checked> <span>Ta med omslag <span class="hint">(uten navn og ID hvis navn ikke vises)</span></span></label>
+      <label><input type="checkbox" id="opt-appendix" checked> <span>Ta med vedlegg <span class="hint">(PDF, JPG og PNG)</span></span></label>
+      <label><input type="checkbox" id="opt-notice" checked> <span>Sett inn en merknadsside for filer som ikke kan tas med <span class="hint">(f.eks. Word, video, lyd)</span></span></label>
+      <label><input type="checkbox" id="opt-footer" checked> <span>Deltakerindeks og sidetall nederst på hver side <span class="hint">(sidetallet starter på nytt for hver kandidat)</span></span></label>
+      <label id="lab-divider"><input type="checkbox" id="opt-divider"> <span>Skilleark foran hver kandidat</span></label>
+      <label id="lab-guide"><input type="checkbox" id="opt-guide"> <span>Legg sensorveiledningen (egen PDF i pakken) først i den samlede PDF-en</span></label>
+    </fieldset>
+    <fieldset>
+      <legend>Rekkefølge på kandidatene</legend>
+      <div class="row">
+        <label><input type="radio" name="sort" id="sort-pos" value="pos" checked> <span>Som i WISEflow</span></label>
+        <label><input type="radio" name="sort" id="sort-name" value="name"> <span>Etter navn (A–Å)</span></label>
+      </div>
+    </fieldset>
+    <div class="actions">
+      <button id="go">Lag PDF</button>
+      <button id="reset" class="secondary">Velg en annen fil</button>
+    </div>
+    <div id="progresswrap" hidden style="display:grid;gap:6px">
+      <progress id="progress" max="1" value="0"></progress>
+    </div>
+    <p id="status" aria-live="polite"></p>
+    <div id="result"></div>
+  </section>
+  <p class="contact">Noe som ikke virker? Send e-post til <a href="mailto:robast@oslomet.no">robast@oslomet.no</a>. Ikke legg ved besvarelser.</p>
+</main>
+
+<script>/*__JSZIP__*/</script>
+<script>/*__PDFLIB__*/</script>
+<script>/*__PDFJS__*/</script>
+<script type="text/plain" id="pdfjs-worker">/*__PDFJSWORKER__*/</script>
+<script>
+(() => {
+"use strict";
+const { PDFDocument, StandardFonts, rgb, degrees, PDFName, PDFHexString } = PDFLib;
+const $ = (id) => document.getElementById(id);
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.getElementById("pdfjs-worker").textContent], { type: "text/javascript" }));
+} catch (e) { console.warn("pdf.js worker", e); }
+const collator = new Intl.Collator("nb", { numeric: true, sensitivity: "base" });
+
+let state = null; // { flowName, candidates, guide, zipName }
+let lastUrls = [];
+
+// ---------- fil-inngang ----------
+const drop = $("drop"), fileInput = $("file");
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) load(f);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) load(fileInput.files[0]); fileInput.value = ""; });
+$("reset").addEventListener("click", () => fileInput.click());
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener("change", syncOptions));
+$("opt-showname").addEventListener("change", () => { if (state) render(); });
+$("go").addEventListener("click", run);
+document.querySelectorAll('input[name=sort]').forEach(r => r.addEventListener("change", () => { if (state) render(); }));
+
+function syncOptions() {
+  const all = $("mode-all").checked;
+  const hasGuide = !!(state && state.guide);
+  setEnabled("opt-guide", "lab-guide", all && hasGuide);
+  setEnabled("opt-divider", "lab-divider", all);
+}
+function setEnabled(inputId, labelId, on) {
+  $(inputId).disabled = !on;
+  $(labelId).classList.toggle("disabled", !on);
+}
+function setStatus(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+// ---------- lesing av zip ----------
+function decodeName(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(u8); }
+  catch { return new TextDecoder("windows-1252").decode(u8); }
+}
+const ext = (p) => (p.match(/\.([^./]+)$/) || [, ""])[1].toLowerCase();
+const base = (p) => p.split("/").pop();
+const stem = (p) => base(p).replace(/\.[^.]+$/, "");
+
+async function load(file) {
+  clearResult();
+  setStatus("Leser zip-fila …");
+  $("options").hidden = false;
+  try {
+    const zip = await JSZip.loadAsync(file, { decodeFileName: decodeName });
+    state = await analyse(zip, file.name);
+    render();
+    setStatus(state.candidates.length ? "" : "Fant ingen besvarelser i zip-fila. Er det en pakke fra «Offline vurdering»?", !state.candidates.length);
+    $("go").disabled = !state.candidates.length;
+  } catch (e) {
+    console.error(e);
+    state = null;
+    $("overview").hidden = true;
+    $("go").disabled = true;
+    setStatus("Klarte ikke å lese fila som zip. Sjekk at det er zip-fila fra WISEflow, ikke en utpakket mappe.", true);
+  }
+  syncOptions();
+}
+
+async function analyse(zip, zipName) {
+  const all = [];
+  zip.forEach((path, entry) => {
+    if (entry.dir) return;
+    if (/(^|\/)__MACOSX\//.test(path) || /(^|\/)\.DS_Store$/.test(path) || /(^|\/)Thumbs\.db$/i.test(path)) return;
+    all.push({ path, entry });
+  });
+
+  // Finn rot (zip kan være pakket inn i en ekstra mappe)
+  let root = "", meta = null;
+  const metaEntry = all.filter(f => base(f.path) === "_METADATA").sort((a, b) => a.path.length - b.path.length)[0];
+  if (metaEntry) {
+    root = metaEntry.path.slice(0, -"_METADATA".length);
+    try { meta = JSON.parse(await metaEntry.entry.async("string")); } catch { meta = null; }
+  }
+  const files = all.filter(f => f !== metaEntry).map(f => ({ ...f, rel: f.path.startsWith(root) ? f.path.slice(root.length) : f.path }));
+  const metaFiles = (meta && meta.files) || {};
+  const metaItems = (meta && meta.items) || {};
+  const findMeta = (rel) => metaFiles[rel] || metaFiles[rel.normalize("NFC")] || null;
+
+  // Sensorveiledning
+  const guide = files.find(f => ext(f.rel) === "pdf" && /^(sensorveiledning|assessment ?guidelines|marking ?guid|bedømmelsesvejledning|bedömningsanvisning)/i.test(f.rel.split("/")[0]))
+             || files.find(f => ext(f.rel) === "pdf" && /sensorveiledning|guideline/i.test(f.rel) && !findMeta(f.rel)?.containerId);
+
+  // Finn besvarelsesfilene
+  let subs;
+  const withMeta = files.filter(f => { const m = findMeta(f.rel); return m && m.containerId != null && !m.isGradeSheetFile; });
+  if (withMeta.length) {
+    subs = withMeta.map(f => ({ ...f, m: findMeta(f.rel) }));
+  } else {
+    // Uten _METADATA: bruk mappa som ligner mest på «Innleveringer»
+    const tops = {};
+    files.forEach(f => { const s = f.rel.split("/"); if (s.length >= 2) (tops[s[0]] ||= []).push(f); });
+    const names = Object.keys(tops);
+    const pick = names.find(n => /innlever|besvarel|submission|aflever|inlämn|inlamn|paper/i.test(n))
+              || names.filter(n => !/sensorveiled|guideline|oppgave|assignment/i.test(n)).sort((a, b) => tops[b].length - tops[a].length)[0];
+    subs = (pick ? tops[pick] : []).map(f => ({ ...f, m: null }));
+  }
+
+  // Grupper per kandidat
+  const groups = new Map();
+  for (const f of subs) {
+    const segs = f.rel.split("/");
+    const key = f.m && f.m.containerId != null ? "c" + f.m.containerId : (segs.length >= 3 ? "d" + segs[1] : "f" + stem(f.rel).replace(/\s*[-_–]\s*[^-_–]*$/, ""));
+    if (!groups.has(key)) groups.set(key, { key, files: [], folder: segs.length >= 3 ? segs[1] : null });
+    groups.get(key).files.push(f);
+  }
+
+  const candidates = [];
+  for (const g of groups.values()) {
+    let label = g.folder || commonPrefix(g.files.map(f => stem(f.rel))).replace(/[\s\-_–]+$/, "") || stem(g.files[0].rel);
+    const pm = label.match(/^\[(?:[^\]\d]*?)(\d+)[^\]]*\]\s*[-–]?\s*(.*)$/);
+    const pos = pm ? parseInt(pm[1], 10) : null;
+    const name = pm ? (pm[2] || label) : label;
+
+    const parts = g.files.map(f => {
+      const m = f.m || {};
+      const nm = base(f.rel);
+      let kind, order = 0, title;
+      if (m.isCoverSheetFile || (!f.m && /^(omslag|forside|cover ?sheet|coversheet|forsite)/i.test(nm))) { kind = "cover"; title = "Omslag"; }
+      else if (m.isItemSubmission) { kind = "item"; const it = metaItems[m.itemReference] || {}; order = it.index ?? 0; title = it.title || it.pathName || stem(nm); }
+      else if (m.isAppendixFile || (!f.m && /vedlegg|appendix|bilag|ekstramateriale|bilaga/i.test(f.rel))) { kind = "appendix"; title = "Vedlegg: " + stem(nm); }
+      else { kind = "main"; title = stem(nm); }
+      const e = ext(nm);
+      const supported = e === "pdf" || e === "jpg" || e === "jpeg" || e === "png";
+      const item = metaItems[m.itemReference] || {};
+      const safeTitle = { cover: "Omslag", item: item.title || item.pathName || "Seksjon", main: "Besvarelse", appendix: "Vedlegg" }[kind];
+      return { f, kind, order, title, safeTitle, ext: e, supported, quarantined: !!m.isQuarantined, noSub: !!m.isNoSubmission, rel: f.rel };
+    });
+    const rank = { cover: 0, item: 1, main: 2, appendix: 3 };
+    parts.sort((a, b) => rank[a.kind] - rank[b.kind] || a.order - b.order || collator.compare(a.rel, b.rel));
+    const im = label.match(/Deltakerindeks\s*(\d+)/i);
+    candidates.push({ label, name, pos, index: im ? parseInt(im[1], 10) : null, parts });
+  }
+
+  const flowName = (meta && meta.flowTitle) || zipName.replace(/\.zip$/i, "");
+  return { flowName, candidates, guide, zipName };
+}
+
+function commonPrefix(arr) {
+  if (!arr.length) return "";
+  let p = arr[0];
+  for (const s of arr) { while (!s.startsWith(p)) p = p.slice(0, -1); }
+  return arr.length > 1 ? p : arr[0];
+}
+
+// Hva kandidaten kalles der navn ikke skal vises. Navn brukes bare hvis haken «Vis kandidatenes navn» er satt.
+function labelCandidates(list) {
+  const show = $("opt-showname").checked;
+  list.forEach((c, i) => {
+    c.number = c.index != null ? `Deltakerindeks ${c.index}` : c.pos != null ? `Nr. ${c.pos}` : `Kandidat ${i + 1}`;
+    c.shown = show ? c.name : c.number;
+  });
+  return list;
+}
+
+function sorted() {
+  const list = state.candidates.slice();
+  if ($("sort-name").checked) list.sort((a, b) => collator.compare(a.name, b.name));
+  else list.sort((a, b) => (a.pos ?? 1e9) - (b.pos ?? 1e9) || collator.compare(a.label, b.label));
+  return list;
+}
+
+// ---------- visning ----------
+function render() {
+  $("overview").hidden = false;
+  $("flowname").textContent = state.flowName;
+  const c = state.candidates;
+  const nParts = c.reduce((s, x) => s + x.parts.length, 0);
+  const nSkip = c.reduce((s, x) => s + x.parts.filter(p => !p.supported).length, 0);
+  $("summary").innerHTML = "";
+  const add = (html) => { const s = document.createElement("span"); s.innerHTML = html; $("summary").append(s); };
+  add(`<b>${c.length}</b> ${c.length === 1 ? "kandidat" : "kandidater"}`);
+  add(`<b>${nParts}</b> filer`);
+  if (nSkip) add(`<b>${nSkip}</b> kan ikke slås sammen`);
+  add(state.guide ? "Sensorveiledning funnet" : "Ingen sensorveiledning i pakken");
+
+  const ol = $("cands"); ol.innerHTML = "";
+  const show = $("opt-showname").checked;
+  for (const cand of labelCandidates(sorted())) {
+    const li = document.createElement("li");
+    const head = document.createElement("div"); head.className = "cname";
+    const pos = document.createElement("span"); pos.className = "pos"; pos.textContent = cand.pos != null ? "#" + cand.pos : "";
+    const nm = document.createElement("span"); nm.textContent = cand.shown;
+    head.append(pos, nm);
+    const parts = document.createElement("div"); parts.className = "parts";
+    for (const p of cand.parts) {
+      const ch = document.createElement("span");
+      ch.className = "chip" + (p.kind === "cover" ? " cover" : "") + (!p.supported ? " skip" : "") + (p.noSub || p.quarantined ? " none" : "");
+      ch.textContent = (show ? p.title : p.safeTitle) + (!p.supported ? ` (.${p.ext})` : "") + (p.noSub ? " – ikke levert" : "") + (p.quarantined ? " – i karantene" : "");
+      parts.append(ch);
+    }
+    li.append(head, parts);
+    ol.append(li);
+  }
+}
+
+// ---------- PDF-bygging ----------
+async function makeHelpers(doc) {
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const safe = (s, f) => Array.from(s).map(ch => { try { f.encodeText(ch); return ch; } catch { return "?"; } }).join("");
+  function wrap(text, f, size, width) {
+    const words = safe(text, f).split(/\s+/); const lines = []; let line = "";
+    for (const w of words) {
+      const t = line ? line + " " + w : w;
+      if (f.widthOfTextAtSize(t, size) > width && line) { lines.push(line); line = w; } else line = t;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+  function textPage(title, body) {
+    const page = doc.addPage([595.28, 841.89]);
+    let y = 760;
+    for (const l of wrap(title, bold, 22, 475)) { page.drawText(l, { x: 60, y, size: 22, font: bold, color: rgb(0.11, 0.13, 0.19) }); y -= 30; }
+    y -= 8;
+    for (const para of body) {
+      for (const l of wrap(para, font, 12, 475)) { page.drawText(l, { x: 60, y, size: 12, font, color: rgb(0.3, 0.33, 0.4) }); y -= 18; }
+      y -= 8;
+    }
+    return page;
+  }
+  // Tekst på den sida leseren ser, også når sida er rotert eller beskåret i PDF-en.
+  function stampFooter(page, left, right) {
+    const size = 9, inset = 36, baseline = 18, color = rgb(0.11, 0.13, 0.19);
+    const box = page.getCropBox();
+    const rot = ((page.getRotation().angle % 360) + 360) % 360;
+    const shownWidth = rot % 180 ? box.height : box.width;
+    const place = (u, v) => {
+      if (rot === 90) return { x: box.x + box.width - v, y: box.y + u };
+      if (rot === 180) return { x: box.x + box.width - u, y: box.y + box.height - v };
+      if (rot === 270) return { x: box.x + v, y: box.y + box.height - u };
+      return { x: box.x + u, y: box.y + v };
+    };
+    const draw = (text, u) => page.drawText(text, { ...place(u, baseline), size, font, color, rotate: degrees(rot) });
+    const r = safe(right, font);
+    const rightWidth = font.widthOfTextAtSize(r, size);
+    let l = safe(left, font);
+    const room = shownWidth - 2 * inset - rightWidth - 12;
+    while (l && font.widthOfTextAtSize(l, size) > room) l = l.slice(0, -1);
+    if (l) draw(l, inset);
+    draw(r, shownWidth - inset - rightWidth);
+  }
+  return { textPage, stampFooter };
+}
+
+async function appendPart(doc, helpers, part, cand, warnings, opts) {
+  const start = doc.getPageCount();
+  const hide = !!opts && !opts.showName;
+  const who = cand.shown ?? cand.name;
+  const fname = hide ? part.safeTitle : base(part.rel);
+  const title = hide ? part.safeTitle : part.title;
+  if (part.noSub) { helpers.textPage("Ikke levert", [`${who}: ${title}`, "WISEflow markerer denne delen som ikke levert."]); return start; }
+  if (part.quarantined) { helpers.textPage("Fil i karantene", [`${who}: ${fname}`, "WISEflow har satt fila i karantene. Åpne den i WISEflow."]); warnings.push(`${who}: ${fname} er i karantene`); return start; }
+  if (!part.supported) {
+    warnings.push(`${who}: ${fname} kan ikke slås sammen (.${part.ext})`);
+    if ($("opt-notice").checked) { helpers.textPage("Vedlegg som ikke kan vises her", [`Kandidat: ${who}`, `Fil: ${fname}`, "Fila er ikke PDF eller bilde og er derfor ikke tatt med. Åpne den i WISEflow eller fra zip-fila."]); return start; }
+    return null;
+  }
+  const bytes = await part.f.entry.async("uint8array");
+  if (hide && part.kind === "cover") {
+    let done = false;
+    if (part.ext === "pdf") { try { done = await addCoverWithoutName(doc, bytes, cand); } catch (e) { console.error(e); } }
+    if (!done) {
+      warnings.push(`${who}: omslaget er ikke tatt med, fordi navnet ikke kunne fjernes sikkert`);
+      helpers.textPage("Omslaget er ikke tatt med", [`Kandidat: ${who}`, "Verktøyet kunne ikke fjerne navnet sikkert fra dette omslaget. Sett haken for å vise navn hvis du trenger omslaget."]);
+    }
+    return start;
+  }
+  try {
+    if (part.ext === "pdf") {
+      if (opts && opts.stripGuide && part.kind === "item") {
+        let plan = null;
+        try { plan = await planWithoutGuide(bytes); } catch (e) { console.error(e); warnings.push(`${who}: ${title} – klarte ikke å skille sensorveiledning fra svar, tok med hele seksjonen`); }
+        if (plan) { await drawPlan(doc, bytes, plan); return start; }
+      }
+      const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+      const pages = await doc.copyPages(src, src.getPageIndices());
+      pages.forEach(p => doc.addPage(p));
+      if (!pages.length) return null;
+    } else {
+      const img = part.ext === "png" ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+      const W = 595.28, H = 841.89, M = 36;
+      const landscape = img.width > img.height;
+      const pw = landscape ? H : W, ph = landscape ? W : H;
+      const s = Math.min((pw - 2 * M) / img.width, (ph - 2 * M) / img.height, 1);
+      const page = doc.addPage([pw, ph]);
+      page.drawImage(img, { x: (pw - img.width * s) / 2, y: (ph - img.height * s) / 2, width: img.width * s, height: img.height * s });
+    }
+  } catch (e) {
+    console.error(e);
+    warnings.push(`${who}: ${fname} kunne ikke leses`);
+    helpers.textPage("Fila kunne ikke leses", [`Kandidat: ${who}`, `Fil: ${fname}`, "Fila kan være skadet eller kryptert. Åpne den i WISEflow."]);
+  }
+  return start;
+}
+
+// Lager omslaget som et bilde uten verdiene i «Deltaker»-boksen, slik at navn og ID ikke finnes i PDF-en.
+// Bare kandidatnummeret og ledetekstene beholdes. Er omslaget ikke slik vi venter, returneres false,
+// og omslaget utelates. Da kommer aldri et navn med ved en feil.
+const COVER_SCALE = 2.5;
+async function addCoverWithoutName(doc, bytes, cand) {
+  const norm = (t) => t.replace(/\s+/g, "").toLowerCase();
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, verbosity: 0 }).promise;
+  try {
+    if (pdf.numPages !== 1) return false;
+    const page = await pdf.getPage(1);
+    if (page.rotate % 360 !== 0) return false;
+    const vp = page.getViewport({ scale: 1 });
+    const items = (await page.getTextContent()).items.filter(it => it.str && it.str.trim()).map(it => {
+      const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+      return { str: it.str, x, y, w: it.width, h: Math.hypot(it.transform[2], it.transform[3]) || it.height || 10 };
+    });
+    const sameLine = (a, b) => Math.abs(a.y - b.y) < 2;
+    const lineOf = (it) => norm(items.filter(o => sameLine(o, it)).sort((a, b) => a.x - b.x).map(o => o.str).join(""));
+    const heading = items.find(it => lineOf(it) === "deltaker");
+    if (!heading) return false;
+    const below = items.filter(it => it.y > heading.y + 2);
+    if (!below.length) return false;
+    const isLabel = (it) => norm(it.str).endsWith(":") && norm(it.str).length <= 30;
+    const secret = below.filter(it => !isLabel(it) && !lineOf(it).startsWith("kandidatnr"));
+    const kept = items.filter(it => !secret.includes(it)).map(it => it.str).join("");
+    if (norm(kept).includes(norm(cand.name))) return false;
+
+    const vs = page.getViewport({ scale: COVER_SCALE });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(vs.width); canvas.height = Math.ceil(vs.height);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vs }).promise;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#fff";
+    for (const it of secret) {
+      ctx.fillRect((it.x - 1.5) * COVER_SCALE, (it.y - it.h) * COVER_SCALE, (it.w + 3) * COVER_SCALE, it.h * 1.4 * COVER_SCALE);
+    }
+    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+    const img = await doc.embedPng(new Uint8Array(await blob.arrayBuffer()));
+    const out = doc.addPage([vp.width, vp.height]);
+    out.drawImage(img, { x: 0, y: 0, width: vp.width, height: vp.height });
+    page.cleanup();
+    return true;
+  } finally { pdf.destroy(); }
+}
+
+async function buildCandidate(doc, helpers, cand, opts, warnings, outline) {
+  const node = { title: opts.showName ? (cand.pos != null ? `#${cand.pos} ` : "") + cand.name : cand.number, page: doc.getPageCount(), children: [] };
+  if (opts.divider) helpers.textPage(cand.shown, [opts.showName && cand.pos != null ? `Posisjon ${cand.pos}` : "", state.flowName].filter(Boolean));
+  const firstPage = doc.getPageCount();
+  let first = true;
+  for (const p of cand.parts) {
+    if (p.kind === "cover" && !opts.cover) continue;
+    if (p.kind === "appendix" && !opts.appendix) continue;
+    const at = await appendPart(doc, helpers, p, cand, warnings, opts);
+    if (at != null && at < doc.getPageCount()) {
+      node.children.push({ title: opts.showName ? p.title : p.safeTitle, page: at, children: [] });
+      if (first && !opts.divider) node.page = at;
+      first = false;
+    }
+  }
+  if (doc.getPageCount() === node.page && !opts.divider) {
+    helpers.textPage(cand.shown, ["Ingen filer å vise for denne kandidaten med valgene du har gjort."]);
+  }
+  if (opts.footer) {
+    const who = opts.showName ? `${cand.number} – ${cand.name}` : cand.number;
+    const total = doc.getPageCount() - firstPage;
+    for (let i = 0; i < total; i++) helpers.stampFooter(doc.getPage(firstPage + i), who, `Side ${i + 1} av ${total}`);
+  }
+  outline.push(node);
+}
+
+function addOutline(doc, items) {
+  if (!items.length) return;
+  const ctx = doc.context;
+  const build = (list, parentRef) => {
+    const refs = list.map(() => ctx.nextRef());
+    list.forEach((it, i) => {
+      const page = doc.getPage(Math.min(it.page, doc.getPageCount() - 1));
+      const dict = ctx.obj({ Title: PDFHexString.fromText(it.title), Parent: parentRef, Dest: [page.ref, "XYZ", null, null, null] });
+      if (i > 0) dict.set(PDFName.of("Prev"), refs[i - 1]);
+      if (i < list.length - 1) dict.set(PDFName.of("Next"), refs[i + 1]);
+      if (it.children && it.children.length) {
+        const c = build(it.children, refs[i]);
+        dict.set(PDFName.of("First"), c.first); dict.set(PDFName.of("Last"), c.last);
+        dict.set(PDFName.of("Count"), ctx.obj(items === list ? -it.children.length : it.children.length));
+      }
+      ctx.assign(refs[i], dict);
+    });
+    return { first: refs[0], last: refs[refs.length - 1] };
+  };
+  const rootRef = ctx.nextRef();
+  const top = build(items, rootRef);
+  ctx.assign(rootRef, ctx.obj({ Type: "Outlines", First: top.first, Last: top.last, Count: items.length }));
+  doc.catalog.set(PDFName.of("Outlines"), rootRef);
+  doc.catalog.set(PDFName.of("PageMode"), PDFName.of("UseOutlines"));
+}
+
+// ---------- fjerning av sensorveiledning i FLOWmulti-seksjoner ----------
+// WISEflow skriver hver oppgave som: overskrift «2.1», sensorveiledning, svarboks med ramme, «WORDS n / m».
+// Vi finner overskriftene i teksten og svarboksene ved å se etter rammens to loddrette kanter i et
+// rasterbilde av sida. Alt mellom overskrift og svarboks klippes bort; resten stables på nye sider.
+const SCALE = 1.5;
+async function planWithoutGuide(bytes) {
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, verbosity: 0 }).promise;
+  try {
+    const pages = [], heights = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      if (page.rotate % 360 !== 0) return null;
+      const vp = page.getViewport({ scale: 1 });
+      const tc = await page.getTextContent();
+      const items = [];
+      for (const it of tc.items) {
+        if (!it.str || !it.str.trim()) continue;
+        const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+        const h = Math.hypot(it.transform[2], it.transform[3]) || it.height || 0;
+        items.push({ str: it.str, x, y, h }); heights.push(h);
+      }
+      const lines = [];
+      items.sort((a, b) => a.y - b.y || a.x - b.x);
+      for (const it of items) {
+        const l = lines.find(l => Math.abs(l.y - it.y) < 2);
+        if (l) { l.parts.push(it); l.x = Math.min(l.x, it.x); l.h = Math.max(l.h, it.h); }
+        else lines.push({ y: it.y, x: it.x, h: it.h, parts: [it] });
+      }
+      lines.forEach(l => { l.str = l.parts.sort((a, b) => a.x - b.x).map(p => p.str).join("").trim(); });
+      const vs = page.getViewport({ scale: SCALE });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(vs.width); canvas.height = Math.ceil(vs.height);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vs }).promise;
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      pages.push({ W: vp.width, H: vp.height, lines, img, cw: canvas.width, ch: canvas.height });
+      page.cleanup();
+    }
+    if (!pages.length) return null;
+    heights.sort((a, b) => a - b);
+    const med = heights[Math.floor(heights.length / 2)] || 10;
+    const headings = [];
+    pages.forEach((pg, pi) => pg.lines.forEach(l => {
+      if (/^\d+(\.\d+)+\.?$/.test(l.str) && l.h >= med * 1.1) headings.push({ pi, y: l.y, h: l.h, x: l.x });
+    }));
+    if (!headings.length) return null;
+    const xs = headings.map(h => h.x).sort((a, b) => a - b);
+    const L = xs[Math.floor(xs.length / 2)];
+
+    const dark = (pg, row, c) => { const i = (row * pg.cw + c) * 4; return pg.img[i] * 0.299 + pg.img[i + 1] * 0.587 + pg.img[i + 2] * 0.114 < 235; };
+    const boxes = [];
+    pages.forEach((pg, pi) => {
+      const R = pg.W - L;
+      const cl = Math.round(L * SCALE), cr = Math.round(R * SCALE);
+      const colDark = (row, cx) => { for (let d = -2; d <= 2; d++) { const c = cx + d; if (c >= 0 && c < pg.cw && dark(pg, row, c)) return true; } return false; };
+      const ink = new Uint8Array(pg.ch);
+      for (let r = 0; r < pg.ch; r++) {
+        for (let c = 0; c < pg.cw; c += 1) { if (dark(pg, r, c)) { ink[r] = 1; break; } }
+      }
+      pg.ink = ink;
+      let start = -1, lastOn = -10;
+      const runs = [];
+      for (let r = 0; r <= pg.ch; r++) {
+        const on = r < pg.ch && colDark(r, cl) && colDark(r, cr);
+        if (on) { if (start < 0 || r - lastOn > 3) { if (start >= 0) runs.push([start, lastOn]); start = r; } lastOn = r; }
+      }
+      if (start >= 0) runs.push([start, lastOn]);
+      runs.filter(([a, b]) => (b - a) / SCALE >= 12).forEach(([a, b]) => boxes.push({ pi, top: a / SCALE, bottom: (b + 1) / SCALE }));
+      pg.img = null;
+    });
+    const before = (pa, ya, pb, yb) => pa < pb || (pa === pb && ya < yb);
+    const cuts = pages.map(() => []);
+    headings.sort((a, b) => a.pi - b.pi || a.y - b.y);
+    headings.forEach((hd, k) => {
+      const next = headings[k + 1];
+      const box = boxes.find(b => before(hd.pi, hd.y, b.pi, b.top) && (!next || before(b.pi, b.top, next.pi, next.y - next.h)));
+      if (!box) return;
+      const hp = pages[hd.pi];
+      let r = Math.round(hd.y * SCALE);
+      while (r < hp.ch - 1 && hp.ink[r]) r++;
+      const a = Math.min(r / SCALE + 0.5, hd.y + hd.h * 0.5), b = box.top - 3;
+      if (hd.pi === box.pi) { if (b - a > 4) cuts[hd.pi].push([a, b]); return; }
+      cuts[hd.pi].push([a, pages[hd.pi].H]);
+      for (let p = hd.pi + 1; p < box.pi; p++) cuts[p].push([0, pages[p].H]);
+      if (b > 0) cuts[box.pi].push([0, b]);
+    });
+    if (!cuts.some(c => c.length)) return null;
+
+    const strips = [];
+    let tops = [], bottoms = [];
+    pages.forEach((pg, pi) => {
+      const toRow = (y) => Math.max(0, Math.min(pg.ch - 1, Math.round(y * SCALE)));
+      for (let r = 0; r < pg.ch; r++) if (pg.ink[r]) { tops.push(r / SCALE); break; }
+      for (let r = pg.ch - 1; r >= 0; r--) if (pg.ink[r]) { bottoms.push(pg.H - (r + 1) / SCALE); break; }
+      const cs = cuts[pi].sort((a, b) => a[0] - b[0]);
+      let cur = 0; const keep = [];
+      for (const [a, b] of cs) { if (a > cur) keep.push([cur, a, cur > 0]); cur = Math.max(cur, b); }
+      if (cur < pg.H) keep.push([cur, pg.H, cur > 0]);
+      // Del ved hver oppgaveoverskrift, så overskriften kan følge svarboksen til neste side
+      for (const hd of headings.filter(h => h.pi === pi)) {
+        const cutAt = hd.y - hd.h - 1;
+        const k = keep.findIndex(([a, b]) => a < cutAt - 2 && b > cutAt + 2);
+        if (k >= 0) { const [a, b, ac] = keep[k]; keep.splice(k, 1, [a, cutAt, ac], [cutAt, b, "heading"]); }
+      }
+      for (const [a, b, afterCut] of keep) {
+        let r0 = toRow(a), r1 = toRow(b);
+        while (r0 < r1 && !pg.ink[r0]) r0++;
+        while (r1 > r0 && !pg.ink[r1]) r1--;
+        if (r1 - r0 < 2 || !pg.ink[r0]) continue;
+        const top = Math.max(a, r0 / SCALE - 1.5), bottom = Math.min(b, (r1 + 1) / SCALE + 1.5);
+        const inBox = (y) => boxes.some(bx => bx.pi === pi && bx.top - 2 <= y && bx.bottom + 2 >= y);
+        strips.push({ page: pi, top, bottom, gap: afterCut === "heading" ? 14 : afterCut ? 12 : 6, heading: afterCut === "heading", startsInBox: inBox(top + 3), endsInBox: inBox(bottom - 3) });
+      }
+    });
+    const W = pages[0].W, H = pages[0].H;
+    const topMargin = Math.max(18, Math.min(...tops) - 2), bottomMargin = Math.max(18, Math.min(...bottoms) - 2);
+    if (strips.some(s => s.bottom - s.top > H - topMargin - bottomMargin + 0.5)) return null;
+    return { strips, W, H, topMargin, bottomMargin };
+  } finally { pdf.destroy(); }
+}
+
+async function drawPlan(doc, bytes, plan) {
+  const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+  const srcPages = src.getPages();
+  const { W, H, topMargin, bottomMargin } = plan;
+  let page = null, cursor = 0, prev = null;
+  const list = plan.strips;
+  list.forEach((s, i) => { if (i && list[i - 1].page !== s.page && list[i - 1].endsInBox && s.startsInBox) s.gap = 0; });
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    const sp = srcPages[s.page];
+    const mb = sp.getMediaBox();
+    const h = s.bottom - s.top;
+    // Hold en oppgaveoverskrift sammen med starten av svarboksen
+    let need = h;
+    if (s.heading && h < 40) {
+      // Neste bit kan ikke deles, så hele den må få plass sammen med overskriften
+      const t = list[i + 1];
+      if (t) need = h + t.gap + (t.bottom - t.top);
+    }
+    if (!page || cursor + s.gap + need > H - bottomMargin) { page = doc.addPage([W, H]); cursor = topMargin; }
+    else cursor += s.gap;
+    const emb = await doc.embedPage(sp, { left: mb.x, right: mb.x + mb.width, bottom: mb.y + mb.height - s.bottom, top: mb.y + mb.height - s.top });
+    page.drawPage(emb, { x: 0, y: H - cursor - h, width: mb.width, height: h });
+    cursor += h;
+  }
+}
+
+function safeFile(s) { return s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/\s+/g, " ").trim().slice(0, 150) || "kandidat"; }
+
+async function run() {
+  if (!state) return;
+  clearResult();
+  const allMode = $("mode-all").checked;
+  const opts = { footer: $("opt-footer").checked, showName: $("opt-showname").checked, cover: $("opt-cover").checked, appendix: $("opt-appendix").checked, divider: allMode && $("opt-divider").checked, stripGuide: !$("opt-itemguide").checked, guide: allMode && $("opt-guide").checked && !!state.guide };
+  const list = labelCandidates(sorted());
+  const warnings = [];
+  $("go").disabled = true; $("reset").disabled = true;
+  $("progresswrap").hidden = false;
+  const prog = $("progress"); prog.max = list.length; prog.value = 0;
+  const width = String(Math.max(...list.map(c => c.pos ?? 0), list.length)).length;
+  try {
+    if ($("mode-all").checked) {
+      const doc = await PDFDocument.create();
+      doc.setTitle(state.flowName); doc.setProducer("WISEflow-samler"); doc.setCreator("WISEflow-samler");
+      const helpers = await makeHelpers(doc);
+      const outline = [];
+      if (opts.guide) {
+        const at = await appendPart(doc, helpers, { f: state.guide, kind: "main", title: "Sensorveiledning", ext: "pdf", supported: true, rel: state.guide.rel }, { name: "Sensorveiledning" }, warnings);
+        if (at != null) outline.push({ title: "Sensorveiledning", page: at, children: [] });
+      }
+      for (let i = 0; i < list.length; i++) {
+        setStatus(`Setter sammen ${i + 1} av ${list.length}: ${list[i].shown}`);
+        await buildCandidate(doc, helpers, list[i], opts, warnings, outline);
+        prog.value = i + 1;
+        await tick();
+      }
+      addOutline(doc, outline);
+      setStatus("Lagrer PDF …"); await tick();
+      const bytes = await doc.save();
+      const name = safeFile(state.flowName) + " - alle kandidater.pdf";
+      offer([{ name, blob: new Blob([bytes], { type: "application/pdf" }), pages: doc.getPageCount() }]);
+    } else {
+      const out = [];
+      for (let i = 0; i < list.length; i++) {
+        const cand = list[i];
+        setStatus(`Setter sammen ${i + 1} av ${list.length}: ${cand.shown}`);
+        const doc = await PDFDocument.create();
+        doc.setTitle(`${cand.shown} – ${state.flowName}`); doc.setProducer("WISEflow-samler"); doc.setCreator("WISEflow-samler");
+        const helpers = await makeHelpers(doc);
+        const outline = [];
+        await buildCandidate(doc, helpers, cand, opts, warnings, outline);
+        addOutline(doc, outline[0] ? outline[0].children : []);
+        const bytes = await doc.save();
+        const prefix = cand.pos != null ? String(cand.pos).padStart(width, "0") + " - " : "";
+        out.push({ name: safeFile(opts.showName ? prefix + cand.name : cand.number) + ".pdf", bytes, pages: doc.getPageCount() });
+        prog.value = i + 1;
+        await tick();
+      }
+      // unike filnavn
+      const seen = {};
+      out.forEach(o => { if (seen[o.name]) { o.name = o.name.replace(/\.pdf$/, ` (${++seen[o.name]}).pdf`); } else seen[o.name] = 1; });
+      if (out.length === 1) {
+        offer([{ name: out[0].name, blob: new Blob([out[0].bytes], { type: "application/pdf" }), pages: out[0].pages }]);
+      } else {
+        setStatus("Pakker zip-fil …"); await tick();
+        const z = new JSZip();
+        out.forEach(o => z.file(o.name, o.bytes));
+        const blob = await z.generateAsync({ type: "blob", compression: "STORE" });
+        offer([{ name: safeFile(state.flowName) + " - PDF per kandidat.zip", blob, count: out.length, pages: out.reduce((s, o) => s + o.pages, 0) }]);
+      }
+    }
+    if (warnings.length) {
+      const d = document.createElement("div"); d.className = "warnlist";
+      d.innerHTML = "<p style=\"margin-top:10px\"><b>Merk:</b></p>";
+      const ul = document.createElement("ul");
+      warnings.forEach(w => { const li = document.createElement("li"); li.textContent = w; ul.append(li); });
+      d.append(ul); $("result").append(d);
+    }
+  } catch (e) {
+    console.error(e);
+    setStatus("Noe gikk galt under sammenslåingen: " + (e && e.message ? e.message : e), true);
+  } finally {
+    $("go").disabled = false; $("reset").disabled = false;
+    $("progresswrap").hidden = true;
+  }
+}
+
+function offer(items) {
+  const r = $("result");
+  for (const it of items) {
+    const url = URL.createObjectURL(it.blob); lastUrls.push(url);
+    const a = document.createElement("a"); a.href = url; a.download = it.name; a.textContent = "Last ned " + it.name;
+    const p = document.createElement("p");
+    const mb = (it.blob.size / 1048576).toFixed(1).replace(".", ",");
+    const info = document.createElement("span"); info.className = "hint";
+    info.textContent = ` · ${it.count ? it.count + " PDF-er, " : ""}${it.pages} sider, ${mb} MB`;
+    p.append(a, info); r.append(p);
+    a.click();
+  }
+  setStatus("Ferdig. Nedlastingen skal starte av seg selv. Hvis ikke, klikk lenken.");
+}
+function clearResult() { $("result").innerHTML = ""; lastUrls.forEach(u => URL.revokeObjectURL(u)); lastUrls = []; }
+const tick = () => new Promise(r => setTimeout(r, 0));
+})();
+</script>
+</body>
+</html>

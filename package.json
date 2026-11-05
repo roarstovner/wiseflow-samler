@@ -1,0 +1,12 @@
+{
+  "name": "wiseflow-samler",
+  "private": true,
+  "description": "Slår sammen WISEflow-besvarelser fra Offline vurdering til PDF, lokalt i nettleseren.",
+  "license": "MIT",
+  "scripts": { "build": "python3 src/build.py" },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "3.11.174"
+  }
+}

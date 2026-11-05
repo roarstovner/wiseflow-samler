@@ -2,7 +2,8 @@
 
 Slår sammen besvarelser fra WISEflow til PDF-er som er klare for utskrift. Du slipper inn zip-fila fra **Offline vurdering** og får enten **én PDF per kandidat** eller **én samlet PDF med alle kandidatene**.
 
-**Bruk verktøyet:** `https://<brukernavn>.github.io/<repo>/`
+**Bruk verktøyet:** <https://wiseflow-samler.roarstovner.no>
+
 Du kan også laste ned [`index.html`](index.html) og åpne den i nettleseren.
 
 ## Besvarelsene forlater aldri maskinen din
@@ -15,21 +16,13 @@ Alt skjer i nettleseren på din egen maskin. Verktøyet har ingen server, og zip
 
 ## Slik bruker du det
 
-1. I WISEflow går du til **Offline vurdering → Eksporter → Generer pakke** og laster ned zip-fila.
-2. Åpne verktøyet og slipp zip-fila inn i vinduet.
-3. Velg hva du vil ha, og klikk **Lag PDF**.
+1. Gå til fanen **Sensor** i WISEflow.
+2. Åpne riktig flow.
+3. Klikk **Offline vurdering** øverst til høyre → gå gjennom de tre stegene → **Eksporter** → **Generer pakke**.
+4. Last ned zip-fila, og slipp den inn i verktøyet. Du trenger ikke å pakke den ut.
+5. Velg hva du vil ha, og klikk **Lag PDF**. Valgene er forklart i verktøyet.
 
-### Valg
-
-| Valg | Hva det gjør |
-|---|---|
-| Én PDF per kandidat / alle i én PDF | Den samlede PDF-en har bokmerker per kandidat og per del. |
-| Ta med sensorveiledningen over hver svarboks | Fjern haken for å skrive ut bare oppgavenummer, svar og ordtelling (FLOWmulti). |
-| Ta med omslag | WISEflows forside for hver kandidat. |
-| Ta med vedlegg | PDF, JPG og PNG. Andre filtyper (Word, video, lyd) får en merknadsside i stedet. |
-| Skilleark med kandidatnavn | Bare i den samlede PDF-en. |
-| Legg sensorveiledningen først | Bruker den separate sensorveiledningen i pakken, hvis den finnes. |
-| Rekkefølge | Som i WISEflow, eller alfabetisk etter navn. |
+![Flowsiden i WISEflow med fanen Sensor merket 1, flownavnet merket 2 og knappen Offline vurdering merket 3](src/wiseflow-offline-vurdering.png)
 
 Verktøyet støtter FLOWmulti, FLOWassign og FLOWlock. Rekkefølgen på delene hentes fra `_METADATA`-fila i pakken.
 
@@ -38,11 +31,17 @@ Verktøyet støtter FLOWmulti, FLOWassign og FLOWlock. Rekkefølgen på delene h
 - **Fjerning av sensorveiledning** gjelder bare FLOWmulti-oppgaver med en svarboks med ramme rundt. Verktøyet fjerner alt mellom oppgavenummeret og svarboksen. Hvis oppgaveteksten også står der, forsvinner den også. Oppgaver uten svarboks, som flervalg, blir ikke endret. Se gjennom resultatet første gang du bruker verktøyet på en ny eksamen.
 - Filer som ikke er PDF eller bilde, kommer ikke med i PDF-en.
 - Verktøyet er testet med norskspråklige pakker. Pakker på andre språk bør virke når `_METADATA` finnes.
+- **Navn vises ikke som standard.** Da fjernes navn og ID fra omslag, bunntekst, bokmerker, filnavn og skilleark, og omslaget lagres som bilde. Hvis verktøyet ikke kan fjerne navnet sikkert, utelates omslaget, og du får en advarsel. Navn som kandidaten selv har skrevet i besvarelsen eller vedlegg, blir ikke fjernet.
+- **Bunnteksten** med deltakerindeks og sidetall skrives oppå sidene. Hvis en side har innhold helt nede ved kanten, kan teksten overlappe. Du kan slå den av i verktøyet.
 - Verktøyet er ikke laget av eller tilknyttet UNIwise/WISEflow.
+
+## Spørsmål og feil
+
+Send e-post til [robast@oslomet.no](mailto:robast@oslomet.no). Ikke legg ved besvarelser.
 
 ## Bygge selv
 
-`index.html` bygges av `src/template.html`, og bibliotekene bygges inn i fila:
+`index.html` bygges av `src/template.html`. Bibliotekene og skjermbildet bygges inn i fila:
 
 ```sh
 npm ci

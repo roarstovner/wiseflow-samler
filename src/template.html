@@ -215,11 +215,17 @@ progress { width: 100%; height: 10px; accent-color: var(--accent); }
 <script>
 (() => {
 "use strict";
-const { PDFDocument, StandardFonts, rgb, degrees, PDFName, PDFHexString } = PDFLib;
+const { PDFDocument, StandardFonts, rgb, degrees, PDFName, PDFHexString, pushGraphicsState, popGraphicsState, concatTransformationMatrix, drawObject } = PDFLib;
 const $ = (id) => document.getElementById(id);
 try {
   pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.getElementById("pdfjs-worker").textContent], { type: "text/javascript" }));
 } catch (e) { console.warn("pdf.js worker", e); }
+// Én felles worker, så den ikke må startes på nytt for hvert dokument.
+let sharedWorker = null;
+const openPdf = (bytes) => {
+  try { sharedWorker ||= new pdfjsLib.PDFWorker(); } catch (e) { console.warn("pdf.js worker", e); }
+  return pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, verbosity: 0, ...(sharedWorker ? { worker: sharedWorker } : {}) }).promise;
+};
 const collator = new Intl.Collator("nb", { numeric: true, sensitivity: "base" });
 
 let state = null; // { flowName, candidates, guide, zipName }
@@ -545,7 +551,7 @@ async function appendPart(doc, helpers, part, cand, warnings, opts) {
 const COVER_SCALE = 2.5;
 async function addCoverWithoutName(doc, bytes, cand) {
   const norm = (t) => t.replace(/\s+/g, "").toLowerCase();
-  const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, verbosity: 0 }).promise;
+  const pdf = await openPdf(bytes);
   try {
     if (pdf.numPages !== 1) return false;
     const page = await pdf.getPage(1);
@@ -569,7 +575,8 @@ async function addCoverWithoutName(doc, bytes, cand) {
     const vs = page.getViewport({ scale: COVER_SCALE });
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(vs.width); canvas.height = Math.ceil(vs.height);
-    const ctx = canvas.getContext("2d");
+    // Ugjennomsiktig lerret gir RGB-PNG uten alfakanal, som kan legges rett inn i PDF-en.
+    const ctx = canvas.getContext("2d", { alpha: false });
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport: vs }).promise;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -578,13 +585,56 @@ async function addCoverWithoutName(doc, bytes, cand) {
     for (const it of secret) {
       ctx.fillRect((it.x - 1.5) * COVER_SCALE, (it.y - it.h) * COVER_SCALE, (it.w + 3) * COVER_SCALE, it.h * 1.4 * COVER_SCALE);
     }
-    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
-    const img = await doc.embedPng(new Uint8Array(await blob.arrayBuffer()));
     const out = doc.addPage([vp.width, vp.height]);
-    out.drawImage(img, { x: 0, y: 0, width: vp.width, height: vp.height });
+    await drawCanvas(doc, out, canvas, vp.width, vp.height);
     page.cleanup();
     return true;
   } finally { pdf.destroy(); }
+}
+
+// Legger lerretet inn som et tapsfritt bilde. Nettleseren lager PNG-en selv (raskt og utenfor
+// hovedtråden). PNG-ens bildedata er en zlib-strøm med PNG-prediktorer, som PDF kan lese direkte,
+// så vi slipper at pdf-lib dekoder og komprimerer bildet på nytt i JavaScript (det tok 2/3 av tida).
+async function drawCanvas(doc, page, canvas, width, height) {
+  const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+  const png = new Uint8Array(await blob.arrayBuffer());
+  const raw = pngIdat(png);
+  let ref;
+  if (raw) {
+    ref = doc.context.register(doc.context.stream(raw.data, {
+      Type: "XObject", Subtype: "Image", Width: raw.width, Height: raw.height, ColorSpace: "DeviceRGB", BitsPerComponent: 8,
+      Filter: "FlateDecode", DecodeParms: { Predictor: 15, Colors: 3, BitsPerComponent: 8, Columns: raw.width },
+    }));
+  } else {
+    // Andre PNG-varianter (f.eks. med alfakanal): la pdf-lib gjøre jobben, tregere men sikkert.
+    const img = await doc.embedPng(png);
+    page.drawImage(img, { x: 0, y: 0, width, height });
+    return;
+  }
+  const name = page.node.newXObject("Image", ref);
+  page.pushOperators(pushGraphicsState(), concatTransformationMatrix(width, 0, 0, height, 0, 0), drawObject(name), popGraphicsState());
+}
+// Henter bildedataene fra en 8-bits RGB-PNG uten interlacing. Andre varianter gir null.
+function pngIdat(u8) {
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (u8.length < 33 || sig.some((b, i) => u8[i] !== b)) return null;
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const type = (o) => String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+  if (type(12) !== "IHDR") return null;
+  const width = dv.getUint32(16), height = dv.getUint32(20);
+  if (u8[24] !== 8 || u8[25] !== 2 || u8[26] !== 0 || u8[27] !== 0 || u8[28] !== 0) return null;
+  const chunks = []; let total = 0;
+  for (let o = 8; o + 12 <= u8.length;) {
+    const len = dv.getUint32(o), t = type(o + 4);
+    if (o + 12 + len > u8.length) return null;
+    if (t === "IDAT") { chunks.push(u8.subarray(o + 8, o + 8 + len)); total += len; }
+    if (t === "IEND") break;
+    o += 12 + len;
+  }
+  if (!total) return null;
+  const data = new Uint8Array(total); let at = 0;
+  for (const c of chunks) { data.set(c, at); at += c.length; }
+  return { width, height, data };
 }
 
 async function buildCandidate(doc, helpers, cand, opts, warnings, outline) {
@@ -645,7 +695,7 @@ function addOutline(doc, items) {
 // rasterbilde av sida. Alt mellom overskrift og svarboks klippes bort; resten stables på nye sider.
 const SCALE = 1.5;
 async function planWithoutGuide(bytes) {
-  const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, verbosity: 0 }).promise;
+  const pdf = await openPdf(bytes);
   try {
     const pages = [], heights = [];
     for (let i = 1; i <= pdf.numPages; i++) {
